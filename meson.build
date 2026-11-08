@@ -1863,6 +1863,16 @@ elif long_long_size == 8 and (long_long_size != long_size or int64_t_typedef == 
 else
   error('Compiler provides no native 64-bit integer type')
 endif
+
+# Some platforms (e.g. QNX on x86) have stricter alignment requirements for (u)int64_t.
+# Figure out what our alignment is and respect that so they remain compatible.
+gint64_attributes = ''
+int64_t_align = cc.alignment('int64_t', prefix : '#include <stdint.h>')
+if int64_t_align > guint64_align and cc.has_function_attribute('aligned')
+  gint64_attributes = ' __attribute__((__aligned__(@0@)))'.format(int64_t_align)
+endif
+
+glibconfig_conf.set('gint64_attributes', gint64_attributes)
 glibconfig_conf.set('glib_extension', glib_extension)
 glibconfig_conf.set('gint64', gint64)
 glibconfig_conf.set_quoted('gint64_modifier', gint64_modifier)

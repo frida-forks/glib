@@ -66,8 +66,8 @@ typedef unsigned @gint32@ guint32;
 
 #define G_HAVE_GINT64 1          /* deprecated, always true */
 
-@glib_extension@typedef signed @gint64@ gint64;
-@glib_extension@typedef unsigned @gint64@ guint64;
+@glib_extension@typedef signed @gint64@ gint64@gint64_attributes@;
+@glib_extension@typedef unsigned @gint64@ guint64@gint64_attributes@;
 
 #define G_GINT64_CONSTANT(val)	@gint64_constant@
 #define G_GUINT64_CONSTANT(val)	@guint64_constant@
