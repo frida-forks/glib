@@ -1193,14 +1193,6 @@ truncate_file (int          fd,
                const char  *dest_file,
                GError     **error)
 {
-#ifdef G_OS_NONE
-  if (error != NULL)
-    set_file_error (error,
-                    dest_file,
-                    _("Failed to write file “%s”: ftruncate() failed: %s"),
-                    ENOSYS);
-  return FALSE;
-#else
   while (
 #ifdef G_OS_WIN32
     g_win32_ftruncate (fd, length) < 0
@@ -1223,7 +1215,6 @@ truncate_file (int          fd,
     }
 
   return TRUE;
-#endif
 }
 
 /* closes @fd once it’s finished (on success or error) */
