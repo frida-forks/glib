@@ -710,6 +710,7 @@ _g_dbus_auth_run_client (GDBusAuth     *auth,
 #endif
             }
           g_free (line);
+          g_clear_object (&mech);
           mech = client_choose_mech_and_send_initial_response (auth,
                                                                credentials,
                                                                conn_flags,
