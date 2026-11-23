@@ -379,8 +379,18 @@ g_cond_wait_until_impl (GCond  *cond,
 
 /* {{{1 GPrivate */
 
-static CRITICAL_SECTION  g_private_lock;
-static GPtrSet          *g_thread_privates;
+typedef VOID (NTAPI *GThreadFlsCallback) (PVOID data);
+typedef DWORD (WINAPI *GThreadFlsAllocFunc) (GThreadFlsCallback callback);
+typedef BOOL (WINAPI *GThreadFlsSetValueFunc) (DWORD index, PVOID value);
+typedef BOOL (WINAPI *GThreadFlsFreeFunc) (DWORD index);
+
+static void g_thread_ensure_destructor_registered (void);
+
+static CRITICAL_SECTION        g_private_lock;
+static GPtrSet                *g_thread_privates;
+static DWORD                   g_thread_cleanup_fls;
+static GThreadFlsSetValueFunc  g_thread_fls_set_value;
+static GThreadFlsFreeFunc      g_thread_fls_free;
 
 static DWORD
 _g_private_get_impl (GPrivate *key)
@@ -433,6 +443,7 @@ g_private_set_impl (GPrivate *key,
   TlsSetValue (_g_private_get_impl (key), value);
 
   g_thread_private_destroy_later (key, value);
+  g_thread_ensure_destructor_registered ();
 }
 
 G_ALWAYS_INLINE static inline void
@@ -448,6 +459,24 @@ g_private_replace_impl (GPrivate *key,
     key->notify (old);
 
   g_thread_private_destroy_later (key, value);
+  g_thread_ensure_destructor_registered ();
+}
+
+static void
+g_thread_ensure_destructor_registered (void)
+{
+  GRealThread *thread;
+
+  if (g_thread_fls_set_value == NULL)
+    return;
+
+  thread = (GRealThread *) g_thread_self ();
+  if (thread->destructor_registered)
+    return;
+
+  g_thread_fls_set_value (g_thread_cleanup_fls,
+                          GUINT_TO_POINTER (GetCurrentThreadId ()));
+  thread->destructor_registered = TRUE;
 }
 
 /* {{{1 GThread */
@@ -1276,6 +1305,10 @@ g_thread_lifetime_beacon_check (GThreadBeacon *beacon)
 
 /* {{{1 Epilogue */
 
+static void g_thread_fls_init (void);
+static void NTAPI g_thread_win32_fls_callback (PVOID data);
+static void g_thread_fls_deinit (void);
+
 static gboolean
 g_thread_lookup_native_funcs (void)
 {
@@ -1318,6 +1351,7 @@ _g_thread_init (void)
 
   InitializeCriticalSection (&g_private_lock);
   g_thread_privates = g_ptr_set_new ();
+  g_thread_fls_init ();
 
 #ifndef _MSC_VER
   /* Set the handler as last to not interfere with ASAN runtimes.
@@ -1360,6 +1394,8 @@ _g_thread_deinit (void)
 {
   gsize i;
 
+  g_thread_fls_deinit ();
+
   g_thread_garbage_collect ();
   g_thread_perform_cleanup (g_thread_self ());
 
@@ -1380,6 +1416,45 @@ _g_thread_deinit (void)
   DeleteCriticalSection (&g_private_lock);
 
   g_thread_xp_deinit ();
+}
+
+static void
+g_thread_fls_init (void)
+{
+  HMODULE kernel32;
+  GThreadFlsAllocFunc fls_alloc;
+
+  kernel32 = GetModuleHandleW (L"KERNEL32.DLL");
+
+  fls_alloc = (GThreadFlsAllocFunc) GetProcAddress (kernel32, "FlsAlloc");
+  if (fls_alloc == NULL)
+    return;
+
+  g_thread_cleanup_fls = fls_alloc (g_thread_win32_fls_callback);
+
+  g_thread_fls_set_value =
+      (GThreadFlsSetValueFunc) GetProcAddress (kernel32, "FlsSetValue");
+  g_thread_fls_free = (GThreadFlsFreeFunc) GetProcAddress (kernel32, "FlsFree");
+}
+
+static void NTAPI
+g_thread_win32_fls_callback (PVOID data)
+{
+  DWORD owner_id = GPOINTER_TO_UINT (data);
+
+  if (glib_initialized && owner_id == GetCurrentThreadId ())
+    _g_thread_win32_thread_detach ();
+}
+
+static void
+g_thread_fls_deinit (void)
+{
+  if (g_thread_fls_free == NULL)
+    return;
+
+  g_thread_fls_free (g_thread_cleanup_fls);
+  g_thread_fls_set_value = NULL;
+  g_thread_fls_free = NULL;
 }
 
 /* vim:set foldmethod=marker: */
