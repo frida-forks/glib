@@ -483,6 +483,9 @@ g_system_thread_free (GRealThread *thread)
 void
 g_system_thread_exit (void)
 {
+  if (glib_initialized)
+    _g_thread_win32_thread_detach ();
+
   _endthreadex (0);
 }
 
@@ -1332,7 +1335,12 @@ _g_thread_init (void)
 void
 _g_thread_win32_thread_detach (void)
 {
-  g_thread_schedule_cleanup (g_thread_self ());
+  GRealThread *thread = (GRealThread *) g_thread_self ();
+
+  if (thread->lifetime_beacon != NULL)
+    return;
+
+  g_thread_schedule_cleanup (thread);
 }
 
 void

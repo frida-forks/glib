@@ -28,6 +28,7 @@ typedef void (* GXtorFunc) (void);
 
 extern GLogLevelFlags g_log_always_fatal;
 extern GLogLevelFlags g_log_msg_prefix;
+G_GNUC_INTERNAL extern gboolean glib_initialized;
 
 void g_quark_init (void);
 

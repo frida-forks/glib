@@ -445,7 +445,7 @@ HMODULE glib_dll;
 
 extern void _proxy_libintl_deinit (void);
 
-static gboolean glib_initialized = FALSE;
+gboolean glib_initialized = FALSE;
 
 static GXtorFunc constructors[G_MAX_N_XTORS];
 static gint num_constructors = 0;
