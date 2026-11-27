@@ -510,6 +510,8 @@ static guint g_thread_n_created_counter = 0;  /* (atomic) */
 static void g_thread_cleanup (gpointer data);
 static GPrivate     g_thread_specific_private = G_PRIVATE_INIT (g_thread_cleanup);
 
+static void g_thread_adopt_placeholder (GRealThread *thread);
+
 /*
  * g_private_set_alloc0:
  * @key: a #GPrivate
@@ -1107,6 +1109,8 @@ g_thread_proxy (gpointer data)
 
   glib_thread_callbacks->on_thread_init ();
 
+  g_thread_adopt_placeholder (thread);
+
   /* This has to happen before G_LOCK, as that might call g_thread_self */
   g_private_set (&g_thread_specific_private, data);
 
@@ -1123,6 +1127,28 @@ g_thread_proxy (gpointer data)
   thread->retval = thread->thread.func (thread->thread.data);
 
   return NULL;
+}
+
+static void
+g_thread_adopt_placeholder (GRealThread *thread)
+{
+  GRealThread *placeholder;
+  GHashTableIter iter;
+  GPrivate *key;
+  gpointer value;
+
+  placeholder = g_private_get (&g_thread_specific_private);
+  if (placeholder == NULL)
+    return;
+
+  g_hash_table_iter_init (&iter, placeholder->pending_garbage);
+  while (g_hash_table_iter_next (&iter, (gpointer *) &key, &value))
+    {
+      if (key != &g_thread_specific_private)
+        g_hash_table_insert (thread->pending_garbage, key, value);
+    }
+
+  g_thread_unref ((GThread *) placeholder);
 }
 
 guint
